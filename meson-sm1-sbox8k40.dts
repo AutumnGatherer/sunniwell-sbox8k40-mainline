@@ -1,0 +1,140 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Chaoge Sunniwell S-BOX8K40 - 参考 tox1/x96-max-plus 修正
+ */
+
+/dts-v1/;
+
+#include "meson-sm1-ac2xx.dtsi"
+#include <dt-bindings/sound/meson-g12a-tohdmitx.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/gpio/meson-g12a-gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/interrupt-controller/amlogic,meson-g12a-gpio-intc.h>
+
+/ {
+	compatible = "chaoge,sbox8k40", "ai-speaker.com,dev3", "amlogic,sm1", "amlogic,g12a";
+	model = "Chaoge Sunniwell S-BOX8K40 4G DDR4";
+
+	aliases {
+		serial1 = &uart_A;
+	};
+
+	fd655_dev {
+		dat_pin = <0x18 0x40 0x00>;
+		dev_name = "fd655_dev";
+		status = "okay";
+		clk_pin = <0x18 0x41 0x00>;
+		compatible = "amlogic,fd655_dev";
+	};
+
+	aml_reboot {
+		compatible = "aml, reboot";
+		sys_reset = <0x84000009>;
+		sys_poweroff = <0x84000008>;
+	};
+};
+
+/* sdio_pwrseq: 无复位，仅延迟 */
+&sdio_pwrseq {
+	reset-gpios = <&gpio GPIOX_6 GPIO_ACTIVE_LOW>;
+	post-power-on-delay-ms = <300>;
+	power-off-delay-us = <10000>;
+};
+
+/* sd_emmc_a (SDIO): 参考 tox1/x96-max-plus 配置 */
+&sd_emmc_a {
+	vmmc-supply = <&vddao_3v3>;
+	vqmmc-supply = <&vddio_ao1v8>;
+	/delete-property/ sd-uhs-sdr104;
+	sd-uhs-sdr12;
+	sd-uhs-sdr25;
+	sd-uhs-sdr50;
+	max-frequency = <50000000>;
+	amlogic,dram-access-quirk;
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	rtl8822cs: wifi@1 {
+		reg = <1>;
+		compatible = "realtek,rtl8822cs";
+	};
+};
+
+/* ==================== 外设 ==================== */
+
+/* simplefb: 让 HDMI 从启动就开始显示控制台 */
+&simplefb_hdmi {
+	status = "okay";
+	reg = <0x7b400000 0x1000000>;
+};
+
+&simplefb_cvbs {
+	status = "disabled";
+};
+
+&ethmac {
+	status = "okay";
+	pinctrl-0 = <&eth_pins>, <&eth_rgmii_pins>;
+	pinctrl-names = "default";
+	phy-handle = <&external_phy>;
+	phy-mode = "rgmii";
+	amlogic,tx-delay-ns = <2>;
+	snps,aal;
+	snps,rxpbl = <0x8>;
+	snps,txpbl = <0x8>;
+	rx-fifo-depth = <4096>;
+	tx-fifo-depth = <4096>;
+	nvmem-cells = <&eth_mac>;
+	nvmem-cell-names = "eth_mac";
+};
+
+&ext_mdio {
+	external_phy: ethernet-phy@0 {
+		reg = <0>;
+		max-speed = <1000>;
+		reset-assert-us = <10000>;
+		reset-deassert-us = <80000>;
+		reset-gpios = <&gpio GPIOZ_15 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)>;
+	};
+};
+
+&usb {
+	status = "okay";
+	dr_mode = "host";
+};
+
+&uart_A {
+	status = "okay";
+	pinctrl-0 = <&uart_a_pins>, <&uart_a_cts_rts_pins>;
+	pinctrl-names = "default";
+	current-speed = <115200>;
+	uart-has-rtscts;
+	amlogic,xtal_tick_en = <0x02>;
+	amlogic,uart-fifosize = <0x80>;
+
+	bluetooth {
+		compatible = "realtek,rtl8822cs-bt";
+		enable-gpios = <&gpio GPIOX_17 GPIO_ACTIVE_HIGH>;
+		host-wake-gpios = <&gpio GPIOX_19 GPIO_ACTIVE_HIGH>;
+		device-wake-gpios = <&gpio GPIOX_18 GPIO_ACTIVE_HIGH>;
+		max-speed = <1500000>;
+		clocks = <&wifi32k>;
+		clock-names = "lpo";
+		vbat-supply = <&vddao_3v3>;
+		vddio-supply = <&vddio_ao1v8>;
+	};
+};
+
+&efuse {
+	eth_mac: eth_mac@0 { reg = <0x0 0x06>; };
+	bt_mac: bt_mac@6 { reg = <0x6 0x06>; };
+	wifi_mac: wifi_mac@12 { reg = <0x0c 0x06>; };
+	usid: usid@18 { reg = <0x12 0x10>; };
+};
+
+&cpu_opp_table {
+	opp-2016000000 { status = "disabled"; };
+	opp-2100000000 { status = "disabled"; };
+};
