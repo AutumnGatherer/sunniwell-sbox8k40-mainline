@@ -51,15 +51,17 @@
 | 网口 PHY | 内部 mdio | 外部 RTL8211F (RGMII) |
 | USB 模式 | otg | host |
 | CPU 频率上限 | 全部启用 | 禁用 2.0 / 2.1 GHz |
+| 重启机制 | PSCI `SYSTEM_RESET` | `syscon-reboot` 接管至 EE Watchdog (`0xffd0f0d0`)，优先级 192 |
+| 节点清理与规范 | 包含无效 `aml_reboot`/`fd655_dev`、`simplefb_hdmi` 32 位 `reg` | 已移除无用 Android BSP 残留节点，修正 `simplefb_hdmi` 为 64 位 `reg` |
 
 ---
 
 ## 已知问题
 
-### 1. 重启后需手动按电源键
-PMIC 不响应 PSCI SYSTEM_RESET 调用。执行 reboot 后盒子会断电，需按电源键才能重新启动。
+### 1. ~~重启后需手动按电源键~~（已修复）
+原厂 bootloader 的 PSCI `SYSTEM_RESET` 在主线内核下会触发整机断电，且原 Android DTS 中的 `aml_reboot` 节点在主线内核中无对应驱动。
 
-临时方案：使用 reboot -f（绕开 PSCI，走 ARM 硬件复位）或接智能插座远程断电。
+现已移除无效的 `aml_reboot` 节点，改为在设备树中添加 `wdt_syscon`（映射 SM1 EE Watchdog 控制器 `0xffd0f0d0`）与 `syscon-reboot`（优先级 `192`，高于 PSCI 的 `129`），在执行 `reboot` 时直接通过硬件看门狗触发 SoC 复位（已在 Linux `6.12.113-ophub` 实机验证可正常重启上线）。
 
 ### 2. WiFi TX 报告超时
 RTL8822CS 固件在 SDIO 上不可靠地发送 TX 状态报告。
@@ -91,7 +93,7 @@ sync
 dtc -I dtb -O dts /boot/dtb/amlogic/meson-sm1-sbox8k40.dtb | grep -E "model|bluetooth|wifi"
 ```
 
-已在 Linux 6.12.87（ophub）上验证通过。
+已在 Linux 6.12.113（ophub）上验证通过（含 `reboot` 正常热重启与 SDIO Wi-Fi/蓝牙初始化检查）。
 
 ---
 

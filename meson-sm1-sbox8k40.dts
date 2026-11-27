@@ -20,18 +20,20 @@
 		serial1 = &uart_A;
 	};
 
-	fd655_dev {
-		dat_pin = <0x18 0x40 0x00>;
-		dev_name = "fd655_dev";
-		status = "okay";
-		clk_pin = <0x18 0x41 0x00>;
-		compatible = "amlogic,fd655_dev";
+	reboot {
+		compatible = "syscon-reboot";
+		regmap = <&wdt_syscon>;
+		offset = <0x0>;
+		mask = <0x03ffffff>;
+		value = <0x03240001>;
+		priority = <192>;
 	};
+};
 
-	aml_reboot {
-		compatible = "aml, reboot";
-		sys_reset = <0x84000009>;
-		sys_poweroff = <0x84000008>;
+&cbus {
+	wdt_syscon: syscon@f0d0 {
+		compatible = "syscon";
+		reg = <0x0 0xf0d0 0x0 0x10>;
 	};
 };
 
@@ -67,7 +69,7 @@
 /* simplefb: 让 HDMI 从启动就开始显示控制台 */
 &simplefb_hdmi {
 	status = "okay";
-	reg = <0x7b400000 0x1000000>;
+	reg = <0x0 0x7b400000 0x0 0x1000000>;
 };
 
 &simplefb_cvbs {
