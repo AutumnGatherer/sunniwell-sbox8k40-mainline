@@ -1,12 +1,21 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Chaoge Sunniwell S-BOX8K40 - 参考 tox1/x96-max-plus 修正
+ * Chaoge Sunniwell S-BOX8K40 (Pro) - 实测硬件为 Amlogic Meson G12A (Revision 28:e / 70:2)
+ * 为兼容现有 Armbian/ophub 引导与脚本保留 meson-sm1-sbox8k40 文件名与 ac2xx 基础 dtsi
  */
 
 /dts-v1/;
 
 #include "meson-sm1-ac2xx.dtsi"
 #include <dt-bindings/sound/meson-g12a-tohdmitx.h>
+#include <dt-bindings/sound/meson-g12a-toacodec.h>
+#include <dt-bindings/power/meson-g12a-power.h>
+#include <dt-bindings/clock/g12a-clkc.h>
+#include <dt-bindings/clock/axg-audio-clkc.h>
+#include <dt-bindings/reset/amlogic,meson-axg-audio-arb.h>
+#include <dt-bindings/reset/amlogic,meson-g12a-audio-reset.h>
+#include <dt-bindings/reset/amlogic,meson-g12a-reset.h>
+#include <dt-bindings/input/input.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/gpio/meson-g12a-gpio.h>
 #include <dt-bindings/interrupt-controller/irq.h>
@@ -27,6 +36,124 @@
 		mask = <0x03ffffff>;
 		value = <0x03240001>;
 		priority = <192>;
+	};
+
+	led-controller {
+		compatible = "gpio-leds";
+
+		led-green {
+			label = "green:status";
+			gpios = <&gpio_ao GPIOAO_10 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+	};
+
+	gpio-keys-polled {
+		compatible = "gpio-keys-polled";
+		poll-interval = <100>;
+
+		power-button {
+			label = "power";
+			linux,code = <KEY_POWER>;
+			gpios = <&gpio_ao GPIOAO_4 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	vdd_ee: regulator-vdd_ee {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_ee";
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	amp_10u2: audio-amplifier-0 {
+		compatible = "simple-audio-amplifier";
+		enable-gpios = <&gpio_ao GPIOAO_2 GPIO_ACTIVE_HIGH>;
+		VCC-supply = <&ao_5v>;
+		sound-name-prefix = "10U2";
+	};
+
+	sound {
+		compatible = "amlogic,axg-sound-card";
+		model = "MESON-G12A-SBOX8K40";
+		audio-widgets = "Line", "Lineout";
+		audio-aux-devs = <&tdmout_b>, <&tdmout_c>, <&amp_10u2>;
+		audio-routing = "TDMOUT_B IN 0", "FRDDR_A OUT 1",
+				"TDMOUT_B IN 1", "FRDDR_B OUT 1",
+				"TDMOUT_B IN 2", "FRDDR_C OUT 1",
+				"TDM_B Playback", "TDMOUT_B OUT",
+				"TDMOUT_C IN 0", "FRDDR_A OUT 2",
+				"TDMOUT_C IN 1", "FRDDR_B OUT 2",
+				"TDMOUT_C IN 2", "FRDDR_C OUT 2",
+				"TDM_C Playback", "TDMOUT_C OUT",
+				"10U2 INL", "ACODEC LOLP",
+				"10U2 INR", "ACODEC LORP",
+				"Lineout", "10U2 OUTL",
+				"Lineout", "10U2 OUTR";
+		clocks = <&clkc CLKID_MPLL2>,
+			 <&clkc CLKID_MPLL0>,
+			 <&clkc CLKID_MPLL1>;
+		assigned-clocks = <&clkc CLKID_MPLL2>,
+				  <&clkc CLKID_MPLL0>,
+				  <&clkc CLKID_MPLL1>;
+		assigned-clock-parents = <0>, <0>, <0>;
+		assigned-clock-rates = <294912000>, <270950400>, <393216000>;
+		status = "okay";
+
+		dai-link-0 {
+			sound-dai = <&frddr_a>;
+		};
+
+		dai-link-1 {
+			sound-dai = <&frddr_b>;
+		};
+
+		dai-link-2 {
+			sound-dai = <&frddr_c>;
+		};
+
+		dai-link-3 {
+			sound-dai = <&tdmif_b>;
+			dai-format = "i2s";
+			dai-tdm-slot-tx-mask-0 = <1 1>;
+			dai-tdm-slot-tx-mask-1 = <1 1>;
+			dai-tdm-slot-tx-mask-2 = <1 1>;
+			dai-tdm-slot-tx-mask-3 = <1 1>;
+			mclk-fs = <256>;
+
+			codec {
+				sound-dai = <&tohdmitx TOHDMITX_I2S_IN_B>;
+			};
+		};
+
+		dai-link-4 {
+			sound-dai = <&tdmif_c>;
+			dai-format = "i2s";
+			dai-tdm-slot-tx-mask-0 = <1 1>;
+			mclk-fs = <256>;
+
+			codec {
+				sound-dai = <&toacodec TOACODEC_IN_C>;
+			};
+		};
+
+		dai-link-5 {
+			sound-dai = <&tohdmitx TOHDMITX_I2S_OUT>;
+
+			codec {
+				sound-dai = <&hdmi_tx>;
+			};
+		};
+
+		dai-link-6 {
+			sound-dai = <&toacodec TOACODEC_OUT>;
+
+			codec {
+				sound-dai = <&acodec>;
+			};
+		};
 	};
 };
 
@@ -90,6 +217,7 @@
 	tx-fifo-depth = <4096>;
 	nvmem-cells = <&eth_mac>;
 	nvmem-cell-names = "eth_mac";
+	power-domains = <&pwrc PWRC_G12A_ETH_ID>;
 };
 
 &ext_mdio {
@@ -105,6 +233,174 @@
 &usb {
 	status = "okay";
 	dr_mode = "host";
+	/delete-property/ power-domains;
+};
+
+&pcie {
+	/delete-property/ power-domains;
+};
+
+&npu {
+	/delete-property/ power-domains;
+};
+
+&mali {
+	mali-supply = <&vdd_ee>;
+};
+
+&pwrc {
+	compatible = "amlogic,meson-g12a-pwrc";
+};
+
+/* G12A 音频总线在 0xff642000，替换 SM1 的 0xff660000 (bus@60000) */
+&apb {
+	/delete-node/ bus@60000;
+
+	audio: bus@42000 {
+		compatible = "simple-bus";
+		reg = <0x0 0x42000 0x0 0x2000>;
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges = <0x0 0x0 0x0 0x42000 0x0 0x2000>;
+
+		clkc_audio: clock-controller@0 {
+			compatible = "amlogic,g12a-audio-clkc";
+			reg = <0x0 0x0 0x0 0xb4>;
+			#clock-cells = <1>;
+			#reset-cells = <1>;
+			clocks = <&clkc CLKID_AUDIO>,
+				 <&clkc CLKID_MPLL0>,
+				 <&clkc CLKID_MPLL1>,
+				 <&clkc CLKID_MPLL2>,
+				 <&clkc CLKID_MPLL3>,
+				 <&clkc CLKID_HIFI_PLL>,
+				 <&clkc CLKID_FCLK_DIV3>,
+				 <&clkc CLKID_FCLK_DIV4>,
+				 <&clkc CLKID_GP0_PLL>;
+			clock-names = "pclk",
+				      "mst_in0",
+				      "mst_in1",
+				      "mst_in2",
+				      "mst_in3",
+				      "mst_in4",
+				      "mst_in5",
+				      "mst_in6",
+				      "mst_in7";
+			resets = <&reset RESET_AUDIO>;
+			status = "okay";
+		};
+
+		frddr_a: audio-controller@1c0 {
+			compatible = "amlogic,g12a-frddr", "amlogic,axg-frddr";
+			reg = <0x0 0x1c0 0x0 0x2c>;
+			#sound-dai-cells = <0>;
+			sound-name-prefix = "FRDDR_A";
+			interrupts = <GIC_SPI 152 IRQ_TYPE_EDGE_RISING>;
+			clocks = <&clkc_audio AUD_CLKID_FRDDR_A>;
+			resets = <&arb AXG_ARB_FRDDR_A>,
+				 <&clkc_audio AUD_RESET_FRDDR_A>;
+			reset-names = "arb", "rst";
+			amlogic,fifo-depth = <512>;
+			status = "okay";
+		};
+
+		frddr_b: audio-controller@200 {
+			compatible = "amlogic,g12a-frddr", "amlogic,axg-frddr";
+			reg = <0x0 0x200 0x0 0x2c>;
+			#sound-dai-cells = <0>;
+			sound-name-prefix = "FRDDR_B";
+			interrupts = <GIC_SPI 153 IRQ_TYPE_EDGE_RISING>;
+			clocks = <&clkc_audio AUD_CLKID_FRDDR_B>;
+			resets = <&arb AXG_ARB_FRDDR_B>,
+				 <&clkc_audio AUD_RESET_FRDDR_B>;
+			reset-names = "arb", "rst";
+			amlogic,fifo-depth = <256>;
+			status = "okay";
+		};
+
+		frddr_c: audio-controller@240 {
+			compatible = "amlogic,g12a-frddr", "amlogic,axg-frddr";
+			reg = <0x0 0x240 0x0 0x2c>;
+			#sound-dai-cells = <0>;
+			sound-name-prefix = "FRDDR_C";
+			interrupts = <GIC_SPI 154 IRQ_TYPE_EDGE_RISING>;
+			clocks = <&clkc_audio AUD_CLKID_FRDDR_C>;
+			resets = <&arb AXG_ARB_FRDDR_C>,
+				 <&clkc_audio AUD_RESET_FRDDR_C>;
+			reset-names = "arb", "rst";
+			amlogic,fifo-depth = <256>;
+			status = "okay";
+		};
+
+		arb: reset-controller@280 {
+			compatible = "amlogic,meson-axg-audio-arb";
+			reg = <0x0 0x280 0x0 0x4>;
+			#reset-cells = <1>;
+			clocks = <&clkc_audio AUD_CLKID_DDR_ARB>;
+			status = "okay";
+		};
+
+		tdmout_b: audio-controller@540 {
+			compatible = "amlogic,g12a-tdmout";
+			reg = <0x0 0x540 0x0 0x40>;
+			sound-name-prefix = "TDMOUT_B";
+			resets = <&clkc_audio AUD_RESET_TDMOUT_B>;
+			clocks = <&clkc_audio AUD_CLKID_TDMOUT_B>,
+				 <&clkc_audio AUD_CLKID_TDMOUT_B_SCLK>,
+				 <&clkc_audio AUD_CLKID_TDMOUT_B_SCLK_SEL>,
+				 <&clkc_audio AUD_CLKID_TDMOUT_B_LRCLK>,
+				 <&clkc_audio AUD_CLKID_TDMOUT_B_LRCLK>;
+			clock-names = "pclk", "sclk", "sclk_sel",
+				      "lrclk", "lrclk_sel";
+			status = "okay";
+		};
+
+		tdmout_c: audio-controller@580 {
+			compatible = "amlogic,g12a-tdmout";
+			reg = <0x0 0x580 0x0 0x40>;
+			sound-name-prefix = "TDMOUT_C";
+			resets = <&clkc_audio AUD_RESET_TDMOUT_C>;
+			clocks = <&clkc_audio AUD_CLKID_TDMOUT_C>,
+				 <&clkc_audio AUD_CLKID_TDMOUT_C_SCLK>,
+				 <&clkc_audio AUD_CLKID_TDMOUT_C_SCLK_SEL>,
+				 <&clkc_audio AUD_CLKID_TDMOUT_C_LRCLK>,
+				 <&clkc_audio AUD_CLKID_TDMOUT_C_LRCLK>;
+			clock-names = "pclk", "sclk", "sclk_sel",
+				      "lrclk", "lrclk_sel";
+			status = "okay";
+		};
+
+		toacodec: audio-controller@740 {
+			compatible = "amlogic,g12a-toacodec";
+			reg = <0x0 0x740 0x0 0x4>;
+			#sound-dai-cells = <1>;
+			sound-name-prefix = "TOACODEC";
+			resets = <&clkc_audio AUD_RESET_TOACODEC>;
+			status = "okay";
+		};
+
+		tohdmitx: audio-controller@744 {
+			compatible = "amlogic,g12a-tohdmitx";
+			reg = <0x0 0x744 0x0 0x4>;
+			#sound-dai-cells = <1>;
+			sound-name-prefix = "TOHDMITX";
+			resets = <&clkc_audio AUD_RESET_TOHDMITX>;
+			status = "okay";
+		};
+	};
+};
+
+&acodec {
+	status = "okay";
+	AVDD-supply = <&vddio_ao1v8>;
+};
+
+&tdmif_b {
+	status = "okay";
+};
+
+&tdmif_c {
+	status = "okay";
 };
 
 &uart_A {
