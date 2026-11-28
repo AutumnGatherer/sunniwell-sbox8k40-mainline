@@ -1,0 +1,127 @@
+name: Build TWRP 9.0
+
+on:
+  workflow_dispatch:
+    inputs:
+      pixel_format:
+        description: "Recovery framebuffer pixel format"
+        required: false
+        default: "BGRA_8888"
+        type: choice
+        options:
+          - BGRA_8888
+          - RGBA_8888
+          - RGBX_8888
+  push:
+    branches:
+      - main
+    paths:
+      - "twrp/**"
+      - ".github/workflows/build-twrp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Free disk space on runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af || true
+          sudo mkdir -p /mnt/twrp
+          sudo chmod 777 /mnt/twrp
+          df -h
+
+      - name: Sync & build TWRP 9.0 inside Ubuntu 20.04 container
+        env:
+          PIXEL_FORMAT: ${{ github.event.inputs.pixel_format || 'BGRA_8888' }}
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/out_twrp"
+          docker run --rm -i \
+            -e PIXEL_FORMAT="$PIXEL_FORMAT" \
+            -v "$GITHUB_WORKSPACE:/src" \
+            -v "/mnt/twrp:/twrp" \
+            ubuntu:20.04 bash -s <<'DOCKER_EOF'
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          export LC_ALL=C
+
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            bc bison build-essential ca-certificates cpio curl file flex gperf \
+            git gnupg liblz4-tool libncurses5 libssl-dev libxml2-utils lzop \
+            openjdk-8-jdk python2 python3 rsync unzip xz-utils zlib1g-dev
+
+          ln -sf /usr/bin/python2 /usr/bin/python
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o /usr/local/bin/repo
+          chmod +x /usr/local/bin/repo
+
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@users.noreply.github.com"
+          git config --global color.ui false
+
+          cd /twrp
+          python3 /usr/local/bin/repo init --depth=1 \
+            -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git \
+            -b twrp-9.0
+          python3 /usr/local/bin/repo sync -c --force-sync --no-clone-bundle --no-tags -j"$(nproc)"
+
+          rm -rf /twrp/device/sunniwell/p291_iptv
+          mkdir -p /twrp/device/sunniwell
+          cp -a /src/twrp/device/sunniwell/p291_iptv /twrp/device/sunniwell/p291_iptv
+          chmod +x /twrp/device/sunniwell/p291_iptv/recovery/root/sbin/remotecfg
+
+          sed -i "s/^TARGET_RECOVERY_PIXEL_FORMAT := .*/TARGET_RECOVERY_PIXEL_FORMAT := \"$PIXEL_FORMAT\"/" \
+            /twrp/device/sunniwell/p291_iptv/BoardConfig.mk
+          grep "TARGET_RECOVERY_PIXEL_FORMAT" /twrp/device/sunniwell/p291_iptv/BoardConfig.mk
+
+          set +u
+          export ALLOW_MISSING_DEPENDENCIES=true
+          source build/envsetup.sh
+          lunch omni_p291_iptv-eng
+          set -u
+
+          mka recoveryimage
+
+          IMG="out/target/product/p291_iptv/recovery.img"
+          test -f "$IMG"
+          SZ=$(stat -c%s "$IMG")
+          echo "Built $IMG ($SZ bytes)"
+          test "$SZ" -le 25165824
+
+          python3 - "$IMG" <<'PYEOF'
+          import struct, sys
+          data = open(sys.argv[1], "rb").read(2048)
+          assert data[:8] == b"ANDROID!", f"Bad magic: {data[:8]!r}"
+          k_sz, k_addr, r_sz, r_addr, s_sz, s_addr, tags, ps, hv, osv = struct.unpack("<10I", data[8:48])
+          cmd = data[64:576].split(b"\x00")[0].decode("latin1")
+          print(f"header_version={hv} pagesize={ps} kernel_sz={k_sz} ramdisk_sz={r_sz} second_sz={s_sz}")
+          print(f"cmdline={cmd}")
+          PYEOF
+
+          cp "$IMG" /src/out_twrp/twrp-sbox8k40-p291_iptv.img
+          sha256sum /src/out_twrp/twrp-sbox8k40-p291_iptv.img > /src/out_twrp/twrp-sbox8k40-p291_iptv.img.sha256
+          chmod 644 /src/out_twrp/*
+          DOCKER_EOF
+
+      - name: Upload TWRP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: twrp-sbox8k40-p291_iptv
+          path: out_twrp/twrp-sbox8k40-p291_iptv.img*
+          retention-days: 90
+
+      - name: Publish to Release (twrp-latest)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: twrp-latest
+          name: S-BOX8K40 Pro TWRP 9.0 (Latest)
+          prerelease: true
+          files: |
+            out_twrp/twrp-sbox8k40-p291_iptv.img
+            out_twrp/twrp-sbox8k40-p291_iptv.img.sha256
