@@ -15,7 +15,7 @@ TARGET_NO_BOOTLOADER := true
 TARGET_PREBUILT_KERNEL := $(DEVICE_PATH)/prebuilt/kernel
 BOARD_KERNEL_BASE := 0x00000000
 BOARD_KERNEL_PAGESIZE := 2048
-BOARD_KERNEL_CMDLINE := androidboot.dtbo_idx=0 buildvariant=userdebug
+BOARD_KERNEL_CMDLINE := androidboot.dtbo_idx=0
 BOARD_MKBOOTIMG_ARGS := --kernel_offset 0x01080000 --ramdisk_offset 0x01000000 --second_offset 0x00f00000 --tags_offset 0x00000100 --header_version 1 --second $(DEVICE_PATH)/prebuilt/second
 
 PLATFORM_VERSION := 9.0.0
@@ -39,6 +39,11 @@ TW_NO_SCREEN_BLANK := true
 TW_NO_BATT_PERCENT := true
 TW_BRIGHTNESS_PATH := "/dev/null"
 TW_EXCLUDE_SUPERSU := true
+TW_EXCLUDE_TWRPAPP := true
+TW_EXCLUDE_MTP := true
+TW_EXCLUDE_BASH := true
+TW_EXCLUDE_NANO := true
+TW_INCLUDE_CRYPTO := false
 TW_INCLUDE_NTFS_3G := true
 TW_USE_NEW_MINADBD := true
 RECOVERY_SDCARD_ON_DATA := true
