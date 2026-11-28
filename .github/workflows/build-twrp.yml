@@ -84,9 +84,8 @@ jobs:
           export ALLOW_MISSING_DEPENDENCIES=true
           source build/envsetup.sh
           lunch omni_p291_iptv-eng
-          set -u
-
           mka recoveryimage
+          set -u
 
           IMG="out/target/product/p291_iptv/recovery.img"
           test -f "$IMG"

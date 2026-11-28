@@ -1,8 +1,8 @@
 DEVICE_PATH := device/sunniwell/p291_iptv
 
-# Architecture (32-bit ARMv7-A userland + 32-bit Linux 4.9.113 uImage on G12A Cortex-A53)
+# Architecture (32-bit ARMv8-A Cortex-A53 userland + 32-bit Linux 4.9.113 uImage on G12A)
 TARGET_ARCH := arm
-TARGET_ARCH_VARIANT := armv7-a-neon
+TARGET_ARCH_VARIANT := armv8-a
 TARGET_CPU_ABI := armeabi-v7a
 TARGET_CPU_ABI2 := armeabi
 TARGET_CPU_VARIANT := cortex-a53
